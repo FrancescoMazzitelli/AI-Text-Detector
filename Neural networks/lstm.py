@@ -30,7 +30,7 @@ print(f'Tensorflow recognize cuda: {tf.test.is_built_with_cuda()}')
 tf.random.set_seed(42)
 
 
-df = pd.read_csv("/root/EsameDeepLearning/cleaned_lemmatized_data.csv")
+df = pd.read_csv("/root/EsameDeepLearning/downsampled_cleaned_lemmatized_similar_data.csv")
 print(df.info())
 print()
 missing_text_rows = df[df['Text'].isna()]
@@ -67,6 +67,7 @@ def sequence_model(maxlen, max_words, embed_size, metrics):
         tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32, activation='relu', return_sequences = True)),
         tf.keras.layers.GlobalMaxPooling1D(),
         tf.keras.layers.Dense(16, activation='relu'),
+        tf.keras.layers.Dense(2, activation='relu'),
         tf.keras.layers.Dense(1, activation='sigmoid')
     ])
     
@@ -90,13 +91,13 @@ maxlen = 7500
 
 model = sequence_model(maxlen, max_features, embed_size, METRICS)
 reduceOnPlateu = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2)
-earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=2, verbose=1, restore_best_weights=True),
+earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=3, verbose=1, restore_best_weights=True),
 
 
 hist = model.fit(
     X_train,
     y_train,
-    epochs=20,
+    epochs=25,
     batch_size=128,
     validation_data=(X_val, y_val), 
     callbacks=[earlyStopping, reduceOnPlateu],
@@ -153,4 +154,4 @@ sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Human', 'AI'], 
 plt.xlabel('Predicted Labels')
 plt.ylabel('True Labels')
 plt.title('Confusion Matrix')
-plt.savefig("confusion_matrix.pdf")
+plt.savefig("confusion_matrix.png")
