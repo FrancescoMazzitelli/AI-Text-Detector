@@ -30,7 +30,7 @@ class TransformerBlock(tf.keras.layers.Layer):
     def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
         super().__init__()
         self.att = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-        self.ffn = tf.keras.keras.Sequential(
+        self.ffn = tf.keras.Sequential(
             [tf.keras.layers.Dense(ff_dim, activation="relu"), tf.keras.layers.Dense(embed_dim),]
         )
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -46,7 +46,7 @@ class TransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.dropout2(ffn_output)
         return self.layernorm2(out1 + ffn_output)
     
-df = pd.read_csv("cleaned_lemmatized_data.csv")
+df = pd.read_csv("/root/EsameDeepLearning/downsampled_cleaned_lemmatized_similar_data.csv")
 print(df.info())
 print()
 missing_text_rows = df[df['Text'].isna()]
@@ -58,15 +58,11 @@ missing_text_rows = df[df['Text'].isna()]
 print(missing_text_rows)
 
 
-
-sample_n = 64000
-df = df.groupby('Generated')['Text'].apply(lambda s: s.sample(n=sample_n, random_state=42)).reset_index()
-df = df[['Text', 'Generated']].sample(frac=1, random_state=42)
 print(len(df))
 
 
 maxlen = 7500
-max_features=5000
+max_features = 10000
 
 tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=max_features)
 tokenizer.fit_on_texts(df['Text'])
@@ -89,7 +85,7 @@ def sequence_model(maxlen, max_words, embed_size, metrics):
             output_dim=embed_size, 
             trainable=True
         ),
-        tf.keras.layers.Lambda(lambda x: TransformerBlock(embed_size, 2, 32)(x)),
+        TransformerBlock(embed_dim=embed_size, num_heads=2, ff_dim=32),
         tf.keras.layers.GlobalMaxPooling1D(),
         tf.keras.layers.Dense(16, activation='relu'),
         tf.keras.layers.Dense(1, activation='sigmoid')
@@ -115,14 +111,14 @@ maxlen = 7500
 
 model = sequence_model(maxlen, max_features, embed_size, METRICS)
 reduceOnPlateu = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2)
-earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=2, verbose=1, restore_best_weights=True),
+earlyStopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=1, verbose=1, restore_best_weights=True),
 
 
 hist = model.fit(
     X_train,
     y_train,
-    epochs=20,
-    batch_size=128,
+    epochs=10,
+    batch_size=32,
     validation_data=(X_val, y_val), 
     callbacks=[earlyStopping, reduceOnPlateu],
     shuffle=False,
@@ -145,28 +141,29 @@ def plot(history, *metrics, filename=None):
         plt.savefig(filename)
     #plt.show()
 
-def plot_test_metrics(test_history, *metrics, filename=None):
-    n_plots = len(metrics)
+def plot_test_metrics(results, metrics_names, filename=None):
+    n_plots = len(metrics_names)
     fig, axs = plt.subplots(1, n_plots, figsize=(18, 5))
 
-    for ax, metric in zip(axs, metrics):
-        ax.plot(test_history[metric], label=f"Test {metric}", color='blue')
-        ax.set_title(f"Test {metric}")
-        ax.set_xlabel("Epochs")
-        ax.set_ylabel(metric)
+    for ax, metric_name, metric_value in zip(axs, metrics_names, results):
+        ax.plot([metric_value], marker='o', label=f"Test {metric_name}", color='blue')
+        ax.set_title(f"Test {metric_name}")
+        ax.set_xlabel("Metrics")
+        ax.set_ylabel(metric_name)
         ax.legend()
 
     if filename:
         plt.savefig(filename)
-    plt.show()
+    #plt.show()
 
 
 plot(hist, 'loss', 'roc-auc', 'accuracy', 'precision', "recall", filename='training.png')
 plot(hist, 'loss', 'roc-auc', 'accuracy', 'precision', "recall", filename='training.pdf')
 
 results = model.evaluate(X_test, y_test, verbose=1)
-plot_test_metrics(results, 'loss', 'roc-auc', 'accuracy', 'precision', "recall", filename='test.png')
-plot_test_metrics(results, 'loss', 'roc-auc', 'accuracy', 'precision', "recall", filename='test.pdf')
+metrics_names = ['loss', 'roc-auc', 'accuracy', 'precision', 'recall']
+plot_test_metrics(results, metrics_names, filename='test.png')
+plot_test_metrics(results, metrics_names, filename='test.pdf')
 
 y_pred_prob = model.predict(X_test)
 y_pred = (y_pred_prob > 0.5).astype(int)
@@ -178,4 +175,4 @@ sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Human', 'AI'], 
 plt.xlabel('Predicted Labels')
 plt.ylabel('True Labels')
 plt.title('Confusion Matrix')
-plt.savefig("confusion_matrix.pdf")
+plt.savefig("confusion_matrix.png")
